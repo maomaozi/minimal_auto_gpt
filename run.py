@@ -16,7 +16,7 @@ TOKEN = ""
 # import tiktoken
 # cl100k_base = tiktoken.get_encoding("cl100k_base")
 
-task = "write an document about iphone14"
+task = "create a flask app, serve a document management api"
 
 prompts = """Complete the task I gave you step by step by generating command. The list of commands you can use as follows:
 
@@ -25,8 +25,8 @@ prompts = """Complete the task I gave you step by step by generating command. Th
 3. write_file: Write variable to file. parameters: [<filename>, <variable_name>]
 4. read_file: Read file to variable, return a variable of the result if success. parameter: [<filename>]
 5. search_file: Search related text content in file, return variables of the contents if success. parameter: [<filename>, <search string>]
-6. sh: Execute shell commands (only non-interactive commands can be used). parameters: [<shell_command_name>, <shell_parameter>]
-7. llm: Let a large language model (GPT) generate result, return a variable of the result if success. parameters: [<prompts_string>]
+6. sh: Execute shell commands (only non-interactive commands can be used). parameters: [<shell_command>, <parameter1>, <parameter2>]
+7. llm: Let a large language model (chatGPT) to generate some text result, return a variable of the result if success. parameters: [<prompts_string>]
 8. stop: call this command while job is done. parameters: []
 
 requirements:
@@ -41,11 +41,12 @@ limitations:
 2. The knowledge of llm is limited
 3. llm can only handle contents less than 3000 words, so use search_file to get related information or summarize your inputs before generate prompts
 4. llm can not access variables and files, pass the all information llm need as parameter instead
+5. the code generate by llm always have some explanation and steps, you need to delete them manually
 
 The format of the output is as follows:
 {"thought": "<what you have done, what you plan to do next>", "command": {"name": "<command name>", "args":["<arg1>", "<arg2>"]}}
 
-start you answer with: "{\"thought\"", end your answer with "}"
+start you answer with: "{\"thought\""
 
 {"task": "your task is to %s"}
 """ % task
@@ -247,19 +248,24 @@ class CommandsContext:
             "results": str(list(map(lambda x: self.__save_variable(self.make_variable(), x[1]), result))).replace("'",
                                                                                                                   "")}
 
-    def sh(self, cmd):
+    def sh(self, *cmd):
+        if cmd[0].find(" ") != -1:
+            cmd = cmd[0].split(" ") + cmd[1:]
+
         try:
-            process = subprocess.Popen(" ".join(cmd), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE)
             stdout, stderr = process.communicate()
 
             if process.returncode == 0:
                 res = stdout.decode("utf-8")
-            res = stderr.decode("utf-8")
+            else:
+                res = stderr.decode("utf-8")
         except Exception as e:
-            res = e
+            res = str(e)
         if len(res) > 350:
             return {"results": res[:200] + "..." + res[-100:]}
+        return {"results": res}
 
     def llm(self, prompts):
         result = chat([
